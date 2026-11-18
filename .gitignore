@@ -1,0 +1,9 @@
+.venv/
+.tools/
+__pycache__/
+.ipynb_checkpoints/
+/data/*
+!/data/check_players.py
+!/data/collect_mmr_bubble.py
+!/data/merge_mmr_bubbles.py
+outputs/

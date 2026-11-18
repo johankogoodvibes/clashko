@@ -1,0 +1,8 @@
+# Native Windows GPU support ends at TensorFlow 2.10.
+tensorflow==2.10.1
+keras==2.10.0
+setuptools==75.8.2
+numpy==1.23.5
+pandas==2.2.3
+scikit-learn==1.5.2
+matplotlib==3.8.4
