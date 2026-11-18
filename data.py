@@ -8,7 +8,9 @@ DATA_DIR = Path(__file__).resolve().parent / "data"
 CSV_FILE = DATA_DIR / "combined_dataset" / "recent_matches.csv"
 # CSV_FILE = DATA_DIR / "player_check" / "recent_matches.csv"
 MAX_LEVEL = 16
-MAX_ELIXIR_LEAKED =  9.0  # Both players must be below this value. None disables the filter.
+MAX_ELIXIR_LEAKED = None # 9.0  # Both players must be below this value. None disables the filter.
+MIN_TROPHIES = 14_000  # Both players must meet this minimum. None disables the filter.
+MAX_ROWS = 50_000  # Cap eligible matches after filtering. None keeps them all.
 
 # Fixed card order shared by both decks; preserve this order for saved models.
 card_names = [
@@ -40,10 +42,10 @@ tower_names = ["Tower Princess", "Cannoneer", "Dagger Duchess", "Royal Chef"]
 input_names = card_names + tower_names
 
 
-def load_data(max_rows=100_000, csv_path=None):
+def load_data(max_rows=MAX_ROWS, csv_path=None):
     source_path = Path(csv_path) if csv_path is not None else CSV_FILE
     print(f"Loading collected matches from {source_path}", flush=True)
-    battles = pd.read_csv(source_path, nrows=max_rows)
+    battles = pd.read_csv(source_path)
     card_columns = [
         f"player_{side}_card_{index}_{field}"
         for side in (1, 2) for index in range(1, 9)
@@ -67,6 +69,23 @@ def load_data(max_rows=100_000, csv_path=None):
         battles = battles.loc[keep]
     elif MAX_ELIXIR_LEAKED is not None:
         print("Leaked-elixir filter skipped: dataset has no complete pair of leaked-elixir columns.", flush=True)
+
+    if MIN_TROPHIES is not None:
+        players = pd.read_csv(source_path.with_name("players.csv"), usecols=["tag", "mmr"])
+        ratings = pd.to_numeric(players.set_index("tag")["mmr"], errors="coerce")
+        player_tags = ["player_1_tag", "player_2_tag"]
+        trophies = battles[player_tags].apply(lambda tags: tags.map(ratings))
+        known = np.isfinite(trophies).all(axis=1)
+        keep = known & trophies.ge(MIN_TROPHIES).all(axis=1)
+        print(f"Trophy filter: both players >= {MIN_TROPHIES:g} | "
+              f"kept {keep.sum():,}/{len(battles):,} matches "
+              f"({(~known).sum():,} with missing/invalid ratings)", flush=True)
+        battles = battles.loc[keep]
+
+    if max_rows is not None:
+        if max_rows < 0:
+            raise ValueError("max_rows must be nonnegative or None.")
+        battles = battles.head(max_rows)
 
     name_columns = [f"player_{side}_card_{index}_name" for side in (1, 2) for index in range(1, 9)]
     names = battles[name_columns].to_numpy()

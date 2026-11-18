@@ -10,18 +10,62 @@ from data import MAX_LEVEL, card_names, tower_names
 from predict import DEFAULT_MODEL, MatchupPredictor, encode_matchup
 
 
-def example_matchup():
-    def deck(names, evolution):
-        return {
-            "cards": [{"name": name, "level": 14, "evolution": name in evolution, "hero": False}
-                      for name in names],
-            "tower": {"name": "Tower Princess", "level": 14},
-        }
+def make_deck(names, evolution=(), heroes=()):
     return {
-        "player": deck(["Hog Rider", "Earthquake", "Firecracker", "Knight", "Skeletons",
-                        "Ice Spirit", "The Log", "Tesla"], {"Firecracker", "Knight"}),
-        "opponent": deck(["Giant", "Prince", "Dark Prince", "Mega Minion", "Electro Wizard",
-                          "Fireball", "Zap", "Miner"], set()),
+        "cards": [{"name": name, "level": 16, "evolution": name in evolution, "hero": name in heroes}
+                  for name in names],
+        "tower": {"name": "Tower Princess", "level": 16},
+    }
+
+
+PRESET_DECKS = {
+    # https://royaleapi.com/decks/stats/cannon-ev1,fireball,hog-rider,ice-golem,ice-spirit,musketeer-hero,skeletons-ev1,the-log
+    "Hog Cycle 2.6": make_deck([
+        "Hog Rider", "Musketeer", "Ice Golem", "Skeletons",
+        "Ice Spirit", "Cannon", "Fireball", "The Log",
+    ], evolution={"Cannon", "Skeletons"}, heroes={"Musketeer"}),
+    # https://royaleapi.com/decks/stats/baby-dragon-ev1,battle-healer,cannon,electro-dragon-ev1,elixir-golem,knight-hero,mother-witch,tornado
+    "Elixir Golem": make_deck([
+        "Elixir Golem", "Battle Healer", "Electro Dragon", "Baby Dragon",
+        "Knight", "Tornado", "Mother Witch", "Cannon",
+    ], evolution={"Electro Dragon", "Baby Dragon"}, heroes={"Knight"}),
+    # https://royaleapi.com/decks/stats/baby-dragon-ev1,barbarian-barrel,golem,lightning,lumberjack-ev1,mega-minion-hero,night-witch,tornado
+    "Golem": make_deck([
+        "Golem", "Night Witch", "Baby Dragon", "Mega Minion",
+        "Lumberjack", "Lightning", "Tornado", "Barbarian Barrel",
+    ], evolution={"Lumberjack", "Baby Dragon"}, heroes={"Mega Minion"}),
+    # https://royaleapi.com/decks/stats/goblin-barrel-ev1,goblin-gang,ice-spirit,inferno-tower,knight-hero,princess-ev1,rocket,the-log
+    "Classic Logbait": make_deck([
+        "Goblin Barrel", "Princess", "Knight", "Goblin Gang",
+        "Ice Spirit", "Inferno Tower", "Rocket", "The Log",
+    ], evolution={"Goblin Barrel", "Princess"}, heroes={"Knight"}),
+    # https://royaleapi.com/decks/stats/arrows,elixir-golem,goblin-curse,lightning,night-witch,skeleton-army-ev1,skeleton-king,witch-ev1
+    "Elixir Golem - Skeleton King": make_deck([
+        "Elixir Golem", "Skeleton King", "Night Witch", "Witch",
+        "Skeleton Army", "Goblin Curse", "Lightning", "Arrows",
+    ], evolution={"Witch", "Skeleton Army"}),
+    # https://royaleapi.com/decks/stats/goblin-curse,golem,inferno-dragon-ev1,miner,night-witch,skeleton-army-ev1,skeleton-king,zap
+    "Golem - Skeleton King Miner": make_deck([
+        "Golem", "Skeleton King", "Miner", "Night Witch",
+        "Inferno Dragon", "Skeleton Army", "Goblin Curse", "Zap",
+    ], evolution={"Inferno Dragon", "Skeleton Army"}),
+    "My deck - Golden Knight": make_deck([
+        "Golden Knight", "Goblin Barrel", "Dart Goblin", "Witch",
+        "Cannon", "Rocket", "Arrows", "Skeleton Army",
+    ], evolution={"Dart Goblin", "Witch"}),
+    "Risko's deck": make_deck([
+        "Hog Rider", "Arrows", "Freeze", "Mini P.E.K.K.A",
+        "Skeleton Army", "Wizard", "Rage", "Inferno Dragon",
+    ], evolution={"Inferno Dragon"}, heroes={"Mini P.E.K.K.A", "Wizard"}),
+}
+
+
+def example_matchup():
+    return {
+        "player": make_deck(["Hog Rider", "Earthquake", "Firecracker", "Knight", "Skeletons",
+                             "Ice Spirit", "The Log", "Tesla"], {"Firecracker", "Knight"}),
+        "opponent": make_deck(["Giant", "Prince", "Dark Prince", "Mega Minion", "Electro Wizard",
+                               "Fireball", "Zap", "Miner"]),
     }
 
 
@@ -126,7 +170,8 @@ class CardCombobox(ttk.Combobox):
         return "break"
 
     def _check_focus(self):
-        if self.winfo_exists() and self.focus_get() is not self:
+        # Native ttk popdowns have Tcl paths but no Python widget wrappers.
+        if self.winfo_exists() and str(self.tk.call("focus")) != str(self):
             self._hide()
 
 
@@ -135,31 +180,41 @@ class DeckEditor(ttk.LabelFrame):
         super().__init__(parent, text=title, padding=12)
         self.columnconfigure(1, weight=1)
         self.cards = []
+        presets = ttk.Frame(self)
+        presets.grid(row=0, column=0, columnspan=5, sticky="ew", pady=(0, 8))
+        presets.columnconfigure(1, weight=1)
+        ttk.Label(presets, text="Preset").grid(row=0, column=0, padx=(0, 8))
+        preset = tk.StringVar(value="Choose a deck...")
+        preset_picker = ttk.Combobox(
+            presets, textvariable=preset, values=list(PRESET_DECKS), state="readonly",
+        )
+        preset_picker.grid(row=0, column=1, sticky="ew")
+        preset_picker.bind("<<ComboboxSelected>>", lambda event: self.set(PRESET_DECKS[preset.get()]))
         for column, heading in enumerate(("", "Card (type to search)", "Level", "Evo", "Hero")):
-            ttk.Label(self, text=heading).grid(row=0, column=column, padx=5, pady=(0, 8), sticky="w")
+            ttk.Label(self, text=heading).grid(row=1, column=column, padx=5, pady=(0, 8), sticky="w")
         for row in range(1, 9):
             name = tk.StringVar()
             level = tk.StringVar(value="14")
             evolution = tk.BooleanVar(value=False)
             hero = tk.BooleanVar(value=False)
-            ttk.Label(self, text=str(row)).grid(row=row, column=0, padx=(0, 6))
+            ttk.Label(self, text=str(row)).grid(row=row + 1, column=0, padx=(0, 6))
             combo = CardCombobox(self, textvariable=name, width=23)
-            combo.grid(row=row, column=1, padx=5, pady=3, sticky="ew")
+            combo.grid(row=row + 1, column=1, padx=5, pady=3, sticky="ew")
             ttk.Spinbox(self, from_=1, to=MAX_LEVEL, width=4, textvariable=level).grid(
-                row=row, column=2, padx=5)
-            ttk.Checkbutton(self, variable=evolution).grid(row=row, column=3, padx=6)
-            ttk.Checkbutton(self, variable=hero).grid(row=row, column=4, padx=6)
+                row=row + 1, column=2, padx=5)
+            ttk.Checkbutton(self, variable=evolution).grid(row=row + 1, column=3, padx=6)
+            ttk.Checkbutton(self, variable=hero).grid(row=row + 1, column=4, padx=6)
             self.cards.append((name, level, evolution, hero))
             for variable in self.cards[-1]:
                 variable.trace_add("write", changed)
-        ttk.Separator(self).grid(row=9, column=0, columnspan=5, sticky="ew", pady=8)
-        ttk.Label(self, text="Tower troop").grid(row=10, column=0, columnspan=2, sticky="w")
+        ttk.Separator(self).grid(row=10, column=0, columnspan=5, sticky="ew", pady=8)
+        ttk.Label(self, text="Tower troop").grid(row=11, column=0, columnspan=2, sticky="w")
         self.tower = tk.StringVar(value=tower_names[0])
         self.tower_level = tk.StringVar(value="14")
         ttk.Combobox(self, textvariable=self.tower, values=tower_names, state="readonly", width=23).grid(
-            row=11, column=0, columnspan=2, padx=(0, 5), pady=6, sticky="ew")
+            row=12, column=0, columnspan=2, padx=(0, 5), pady=6, sticky="ew")
         ttk.Spinbox(self, from_=1, to=MAX_LEVEL, width=4, textvariable=self.tower_level).grid(
-            row=11, column=2, padx=5)
+            row=12, column=2, padx=5)
         self.tower.trace_add("write", changed)
         self.tower_level.trace_add("write", changed)
 
@@ -187,8 +242,8 @@ class DeckPredictorApp:
     def __init__(self, root):
         self.root = root
         root.title("Clash Royale - Deck Matchup Predictor")
-        root.geometry("1080x720")
-        root.minsize(990, 700)
+        root.geometry("1080x750")
+        root.minsize(990, 730)
         style = ttk.Style(root)
         if "clam" in style.theme_names():
             style.theme_use("clam")

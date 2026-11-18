@@ -56,18 +56,21 @@ The default run loads all rows from your collected dataset at
 `data/player_check/recent_matches.csv` and trains for 10 epochs. Training
 reads the local CSV; it does not download matches or call the API.
 
-Settings are hardcoded near the top of `train.py`: `CSV_FILE`, `OUTPUT_DIR`,
-`EPOCHS`, `BATCH_SIZE`, `MAX_ROWS`, `RANDOM_SEED`, and `EVALUATE_TEST_SET`.
-`MAX_ROWS = None` loads every collected match; use an integer for a smaller run.
-Set `EVALUATE_TEST_SET = True` to evaluate the final model on the held-out test
-split after choosing your model.
+Training settings are at the top of `train.py`. The CSV path and row limit
+are in `data.py`.
+`MAX_ROWS = 50_000` caps the dataset after filtering, including the
+`MIN_TROPHIES` filter in `data.py`. Set `MAX_ROWS = None` to keep every eligible match.
+The default split is 80% training, 10% validation, and 10% reserved for testing.
+`train_experiments.py` runs the same training pipeline for each model configuration
+in `RUNS`. Each run uses the same dataset and splits.
+The training scripts use the validation split for metrics and reserve the test split
+for later evaluation.
 
 Each run saves these files in `OUTPUT_DIR` (default `outputs/`):
 
 - `history.png`: training and validation loss and accuracy plots.
 - `history.csv`: the metrics for every epoch.
 - `model.h5`: the trained Keras model.
-- `test_metrics.json`: test loss and accuracy when `EVALUATE_TEST_SET = True`.
 
 Files in the chosen output folder are overwritten on subsequent runs.
 To redraw a saved plot without training:

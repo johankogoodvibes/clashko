@@ -6,8 +6,11 @@ from keras.layers import (
 )
 from keras.optimizers import Adam
 import tensorflow as tf
+CARD_FEATURES = 32
+MATCHUP_LAYERS = 3
 
-def build_model(input_shape):
+
+def build_model(input_shape, *, matchup_layers=MATCHUP_LAYERS, card_features=CARD_FEATURES):
     # One deck has shape (cards, features). Both players use this same encoder.
     deck = keras.Input(shape=input_shape[1:])
     # Uncomment these and the two mask applications below to ignore absent cards.
@@ -16,10 +19,10 @@ def build_model(input_shape):
     #     lambda x: x[:, None, :, 0] > 0, name='attention_mask'
     # )(deck)
 
-    # Each card/tower row has its own 4 -> 16 weights, applied in one batched operation.
+    # Each card/tower row has its own projection, applied in one batched operation.
     x = EinsumDense(
         'bci,cio->bco',
-        output_shape=(input_shape[1], 16),
+        output_shape=(input_shape[1], card_features),
         bias_axes='co',
         activation='relu',
         name='card_features',
@@ -45,29 +48,21 @@ def build_model(input_shape):
             batch_dims=1,
         ),
         name='collect_present_cards',
-    )([x, indices])                          # (batch, 9, 16)
+    )([x, indices])                          # (batch, 9, CARD_FEATURES)
 
-    # transformer block 1    
-    attention = MultiHeadAttention(num_heads=2, key_dim=8)(x, x,)
-    x = Add()([x, attention])
-    
-    x = LayerNormalization()(x)
-    snn = Dense(64, activation="relu")(x)
-    snn = Dense(16)(snn)
-    x = Add()([x, snn])
-    x = LayerNormalization()(x)
+    # transformer block 1
+    for _ in range(2):
+        attention = MultiHeadAttention(num_heads=2, key_dim=card_features // 2)(x, x,)
+        x = Add()([x, attention])
+        
+        x = LayerNormalization()(x)
+        snn = Dense(64, activation="relu")(x)
+        snn = Dense(card_features)(snn)
+        x = Add()([x, snn])
+        x = LayerNormalization()(x)
 
-    # transformer block 2
-    attention = MultiHeadAttention(num_heads=2, key_dim=8)(x, x,)
-    x = Add()([x, attention])
-    
-    x = LayerNormalization()(x)
-    snn = Dense(64, activation="relu")(x)
-    snn = Dense(16)(snn)
-    x = Add()([x, snn])
-    x = LayerNormalization()(x)
 
-    x = Dense(15, name='card_content')(x)
+    x = Dense(card_features - 1, name='card_content')(x) # neskor pridam este ktory je to hrac
     deck_encoder = keras.Model(deck, x, name='deck_encoder')
 
     match = keras.Input(shape=input_shape)
@@ -91,65 +86,20 @@ def build_model(input_shape):
         lambda t: tf.zeros_like(t[:, :1, 0], dtype=tf.int32),
         name='cls_ids',
     )(player_1)
-    cls = keras.layers.Embedding(1, 16)(cls_ids)
+    cls = keras.layers.Embedding(1, card_features)(cls_ids)
 
     x = Concatenate(axis=1)([cls, player_1, player_2])
 
     #transformer block
-    attention = MultiHeadAttention(num_heads=4, key_dim=8)(x, x)
-    x=Add()([x, attention])
-    x = LayerNormalization()(x)
-    snn = Dense(64, activation="relu")(x)
-    snn = Dense(16)(snn)
-    x = Add()([x, snn])
-    x = LayerNormalization()(x)
+    for _ in range(matchup_layers):
+        attention = MultiHeadAttention(num_heads=4, key_dim=card_features // 2)(x, x)
+        x=Add()([x, attention])
+        x = LayerNormalization()(x)
+        snn = Dense(64, activation="relu")(x)
+        snn = Dense(card_features)(snn)
+        x = Add()([x, snn])
+        x = LayerNormalization()(x)
 
-    #transformer block
-    attention = MultiHeadAttention(num_heads=4, key_dim=8)(x, x)
-    x=Add()([x, attention])
-    x = LayerNormalization()(x)
-    snn = Dense(64, activation="relu")(x)
-    snn = Dense(16)(snn)
-    x = Add()([x, snn])
-    x = LayerNormalization()(x)
-
-    #transformer block
-    attention = MultiHeadAttention(num_heads=4, key_dim=8)(x, x)
-    x=Add()([x, attention])
-    x = LayerNormalization()(x)
-    snn = Dense(64, activation="relu")(x)
-    snn = Dense(16)(snn)
-    x = Add()([x, snn])
-    x = LayerNormalization()(x)
-
-
-    #transformer block
-    attention = MultiHeadAttention(num_heads=4, key_dim=8)(x, x)
-    x=Add()([x, attention])
-    x = LayerNormalization()(x)
-    snn = Dense(64, activation="relu")(x)
-    snn = Dense(16)(snn)
-    x = Add()([x, snn])
-    x = LayerNormalization()(x)
-
-    #transformer block
-    attention = MultiHeadAttention(num_heads=4, key_dim=8)(x, x)
-    x=Add()([x, attention])
-    x = LayerNormalization()(x)
-    snn = Dense(64, activation="relu")(x)
-    snn = Dense(16)(snn)
-    x = Add()([x, snn])
-    x = LayerNormalization()(x)
-
-    #transformer block
-    attention = MultiHeadAttention(num_heads=4, key_dim=8)(x, x)
-    x=Add()([x, attention])
-    x = LayerNormalization()(x)
-    snn = Dense(64, activation="relu")(x)
-    snn = Dense(16)(snn)
-    x = Add()([x, snn])
-    x = LayerNormalization()(x)
-    
     # x = Flatten()(x)
     # Calling the same encoder twice shares all card and attention weights.
     # x = Concatenate()([deck_encoder(player_1), deck_encoder(player_2)])
@@ -163,12 +113,12 @@ def build_model(input_shape):
     # p1 = Lambda(lambda t: t[:, :9, :])(x)
     # p2 = Lambda(lambda t: t[:, 9:, :])(x)
 
-    # p1 = GlobalAveragePooling1D()(p1)  # (batch, 16)
-    # p2 = GlobalAveragePooling1D()(p2)  # (batch, 16)
+    # p1 = GlobalAveragePooling1D()(p1)  # (batch, CARD_FEATURES)
+    # p2 = GlobalAveragePooling1D()(p2)  # (batch, CARD_FEATURES)
     # summary = Concatenate()([p1, p2])  # (batch, 32)
 
     # common polling for players
-    # summary = GlobalAveragePooling1D()(x)  # (batch, 16)
+    # summary = GlobalAveragePooling1D()(x)  # (batch, CARD_FEATURES)
 
     #csv
     summary = Lambda(lambda t: t[:, 0, :])(x)

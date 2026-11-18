@@ -3,12 +3,45 @@ from copy import deepcopy
 import tempfile
 from pathlib import Path
 import unittest
+from unittest.mock import Mock
+import tkinter as tk
 
 import numpy as np
 
 from data import MAX_LEVEL, card_names, input_names, tower_names
-from deck_predictor import example_matchup
+from deck_predictor import CardCombobox, example_matchup
 from predict import MatchupPredictor, encode_matchup
+
+
+class AutocompleteFocusTests(unittest.TestCase):
+    def test_focus_check_handles_native_popdown_without_python_wrapper(self):
+        # Use Tcl without opening a window or changing desktop focus.
+        interpreter = tk.Tcl()
+        root = tk.Misc()
+        root.master = None
+        combo = CardCombobox.__new__(CardCombobox)
+        combo.tk = interpreter
+        combo.master = root
+        combo._w = ".cards"
+        combo.children = {}
+        root.children = {"cards": combo}
+        combo._hide = Mock()
+        interpreter.createcommand("winfo", lambda command, path: 1)
+
+        for focused in (".cards", ".cards.popdown.f.l", ".other", ""):
+            with self.subTest(focused=focused):
+                interpreter.createcommand("focus", lambda: focused)
+                combo._hide.reset_mock()
+                if focused == ".cards.popdown.f.l":
+                    with self.assertRaisesRegex(KeyError, "popdown"):
+                        combo.focus_get()
+                combo._check_focus()
+                self.assertEqual(combo._hide.called, focused != ".cards")
+
+        interpreter.createcommand("winfo", lambda command, path: 0)
+        combo._hide.reset_mock()
+        combo._check_focus()
+        combo._hide.assert_not_called()
 
 
 class PredictionTests(unittest.TestCase):
@@ -21,7 +54,7 @@ class PredictionTests(unittest.TestCase):
         self.assertEqual(encoded.dtype, np.float16)
         np.testing.assert_array_equal(encoded[0, :, :, 0].sum(axis=1), [9, 9])
         np.testing.assert_array_equal(encoded[0, 0, card_names.index("Hog Rider")], [1, 0, 1, 1])
-        np.testing.assert_array_equal(encoded[0, 0, card_names.index("Firecracker")], [1, 1, 0, 14/MAX_LEVEL])
+        np.testing.assert_array_equal(encoded[0, 0, card_names.index("Firecracker")], [1, 1, 0, 16/MAX_LEVEL])
         tower = len(card_names) + tower_names.index("Royal Chef")
         np.testing.assert_array_equal(encoded[0, 1, tower], [1, 0, 0, 12/MAX_LEVEL])
         np.testing.assert_array_equal(encoded[0, 0, card_names.index("Giant")], [0, 0, 0, 0])
