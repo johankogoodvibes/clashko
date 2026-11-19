@@ -1,4 +1,4 @@
-"""Run with .venv\python.exe -m unittest test_predict -v."""
+"""Run with py -3.10 -m unittest test_predict -v."""
 from copy import deepcopy
 import tempfile
 from pathlib import Path

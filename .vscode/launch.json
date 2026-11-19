@@ -6,7 +6,7 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}\\train.py",
-            "python": "${workspaceFolder}\\.venv\\python.exe",
+            "python": "C:\\Users\\johny\\AppData\\Local\\Programs\\Python\\Python310\\python.exe",
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal",
             "justMyCode": true

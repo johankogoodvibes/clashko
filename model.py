@@ -14,12 +14,13 @@ from keras.layers import (
     Concatenate,
     LayerNormalization,
     Reshape,
+    Rescaling,
 )
 from keras.optimizers import Adam
 import tensorflow as tf
 
-CARD_FEATURES = 32
-MATCHUP_LAYERS = 3
+CARD_FEATURES = 64
+MATCHUP_LAYERS = 4
 
 
 METRICS = [
@@ -45,8 +46,12 @@ METRIC_TO_METRIC = {
 
 
 def build_model(
-    input_shape, *, matchup_layers=MATCHUP_LAYERS, card_features=CARD_FEATURES
+    input_shape, *, matchup_layers=MATCHUP_LAYERS, card_features=CARD_FEATURES,
+    targets=None,
 ):
+    targets = tuple(METRICS if targets is None else targets)
+    if not targets or len(set(targets)) != len(targets) or any(name not in METRIC_TO_LOSS for name in targets):
+        raise ValueError("Select one or more distinct targets: winner, tower_hp, crowns.")
     deck = keras.Input(shape=input_shape[1:])
 
     # Each card/tower row has its own projection, applied in one batched operation.
@@ -93,7 +98,7 @@ def build_model(
         x = Add()([x, attention])
 
         x = LayerNormalization()(x)
-        snn = Dense(64, activation="relu")(x)
+        snn = Dense(card_features*4, activation="relu")(x)
         snn = Dense(card_features)(snn)
         x = Add()([x, snn])
         x = LayerNormalization()(x)
@@ -132,7 +137,7 @@ def build_model(
         attention = MultiHeadAttention(num_heads=4, key_dim=card_features // 2)(x, x)
         x = Add()([x, attention])
         x = LayerNormalization()(x)
-        snn = Dense(64, activation="relu")(x)
+        snn = Dense(card_features*4, activation="relu")(x)
         snn = Dense(card_features)(snn)
         x = Add()([x, snn])
         x = LayerNormalization()(x)
@@ -159,24 +164,20 @@ def build_model(
     # csv
     summary = Lambda(lambda t: t[:, 0, :])(x)
 
-    prediction = Dense(2, activation="softmax", name="winner")(summary)
-
-    tower_hp = Dense(6, activation="sigmoid")(summary)
-    tower_hp = Reshape((2, 3), name="tower_hp")(tower_hp)
-    crowns = Dense(2, activation="sigmoid", name="crowns")(summary)
-
     outputs = []
-    if "winner" in METRICS:
-        outputs.append(prediction)
-    if "tower_hp" in METRICS:
-        outputs.append(tower_hp)
-    if "crowns" in METRICS:
-        outputs.append(crowns)
+    if "winner" in targets:
+        outputs.append(Dense(2, activation="softmax", name="winner")(summary))
+    if "tower_hp" in targets:
+        tower_hp = Dense(6, activation="sigmoid")(summary)
+        outputs.append(Reshape((2, 3), name="tower_hp")(tower_hp))
+    if "crowns" in targets:
+        crowns = Dense(2, activation="sigmoid")(summary)
+        outputs.append(Rescaling(3.0, name="crowns")(crowns))
     # prediction = Dense(2, activation='softmax')(x)
     cnn = keras.Model(match, outputs=outputs)
-    loss = {i: METRIC_TO_LOSS[i] for i in METRICS}
-    loss_weight = {i: METRIC_TO_WEIGHT[i] for i in METRICS}
-    metrics = {i: METRIC_TO_METRIC[i] for i in METRICS}
+    loss = {i: METRIC_TO_LOSS[i] for i in targets}
+    loss_weight = {i: METRIC_TO_WEIGHT[i] for i in targets}
+    metrics = {i: METRIC_TO_METRIC[i] for i in targets}
     cnn.compile(
         loss=loss,
         loss_weights=loss_weight,

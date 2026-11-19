@@ -14,7 +14,7 @@ from merge_mmr_bubbles import save_plots
 
 START_TAG = "20P2PGJ202"       # Example: "#YOURTAG"
 START_MMR = 8000      # Set the approximate starting Ladder rating, e.g. 6000.
-TARGET_MATCHES = 50_000
+TARGET_MATCHES = 100_000
 MAX_NEW_MATCHES_PER_PLAYER = 30
 WORKERS = 8
 DELAY = 0.01
@@ -232,11 +232,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tag", default=START_TAG, help="Starting player tag (defaults to START_TAG).")
     parser.add_argument("--mmr", type=int, default=START_MMR, help="Starting MMR category (defaults to START_MMR).")
+    parser.add_argument("--require-target", action="store_true", help="Exit with status 3 if collection ends below the match target.")
     args = parser.parse_args()
     if not args.tag.strip() or args.mmr is None:
         parser.error("Pass --tag and --mmr, or set START_TAG and START_MMR in the script.")
-    collect_bubble(args.tag, args.mmr, OUTPUT_ROOT / str(args.mmr))
+    saved = collect_bubble(args.tag, args.mmr, OUTPUT_ROOT / str(args.mmr))
+    return 3 if args.require_target and saved < TARGET_MATCHES else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

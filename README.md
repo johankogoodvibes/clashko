@@ -33,7 +33,7 @@ Inputs use exactly the fixed card/tower order and feature normalization from
 `data.py`. Duplicate cards, unknown names and invalid levels are rejected.
 
 The interface is in `deck_predictor.py`; reusable encoding and model inference
-are in `predict.py`. Run directly with `.\.venv\python.exe .\deck_predictor.py`.
+are in `predict.py`. Run directly with `py -3.10 .\deck_predictor.py`.
 
 This project uses native Windows, Python 3.10, TensorFlow 2.10.1, Keras 2.10,
 CUDA 11.2, and cuDNN 8.1. TensorFlow 2.10 is the last release with native
@@ -47,8 +47,8 @@ Open PowerShell in this folder and run:
 .\run-training.cmd
 ```
 
-The launcher uses `.venv\python.exe` and the environment's CUDA libraries.
-You can also run `.\.venv\python.exe .\train.py` directly. The script configures
+The launcher uses system Python 3.10 and the installed CUDA libraries.
+You can also run `py -3.10 .\train.py` directly. The script configures
 CUDA before importing Keras and prints the detected GPU and model weights device.
 In VS Code, select **Run and Debug > Train on GPU** and press **F5**.
 
@@ -76,9 +76,9 @@ Files in the chosen output folder are overwritten on subsequent runs.
 To redraw a saved plot without training:
 
 ```powershell
-.\.venv\python.exe .\plot_history.py
+py -3.10 .\plot_history.py
 # Or pass a different run's history:
-.\.venv\python.exe .\plot_history.py .\outputs\experiment-2\history.csv
+py -3.10 .\plot_history.py .\outputs\experiment-2\history.csv
 ```
 
 ## Edit the model and data
@@ -120,7 +120,7 @@ and fetches their recent battle logs. Put your API key into `API_KEY` near the
 start of that file, then run:
 
 ```powershell
-.\.venv\python.exe .\data\check_players.py
+py -3.10 .\data\check_players.py
 ```
 
 Settings are hardcoded at the top: `MAX_PLAYERS`, `PLOTS_ONLY`, `REFRESH`,
@@ -208,7 +208,7 @@ It reuses `API_KEY` from `data/check_players.py`. Pass the starting tag and MMR
 as command-line arguments:
 
 ```powershell
-.\.venv\python.exe .\data\collect_mmr_bubble.py --tag "#YOURTAG" --mmr 6000
+py -3.10 .\data\collect_mmr_bubble.py --tag "#YOURTAG" --mmr 6000
 ```
 
 Omit these arguments to use `START_TAG` and `START_MMR` from the script.
@@ -249,7 +249,7 @@ Run the merge manually when you want to update `data/combined_dataset/` and
 its combined MMR and match-date distribution plots:
 
 ```powershell
-.\.venv\python.exe .\data\merge_mmr_bubbles.py
+py -3.10 .\data\merge_mmr_bubbles.py
 ```
 
 This writes `data/combined_dataset/recent_matches.csv` and `players.csv`,
@@ -262,7 +262,14 @@ sides of each unique match. To train on that collection, set `CSV_FILE` in
 
 ## Install or restore the environment
 
-Install or restore the project environment from PowerShell:
+The launchers use system Python 3.10 with CUDA 11.2 and cuDNN 8.1.
+After installing those, install the Python packages from PowerShell:
+
+```powershell
+py -3.10 -m pip install -r .\requirements-gpu.txt
+```
+
+For an optional project-local environment, run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup-gpu.ps1
@@ -275,7 +282,7 @@ one model training batch. The plain Python workflow does not require Jupyter.
 Recheck GPU operation from PowerShell:
 
 ```powershell
-.\.venv\python.exe .\check_gpu.py
+py -3.10 .\check_gpu.py
 ```
 
 The model is small; GPU use can be brief and may not be faster

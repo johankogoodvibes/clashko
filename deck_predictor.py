@@ -1,4 +1,4 @@
-"""Desktop deck builder. Run with .venv\python.exe deck_predictor.py."""
+"""Desktop deck builder. Run with py -3.10 deck_predictor.py."""
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 import json

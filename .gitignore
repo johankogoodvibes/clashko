@@ -10,4 +10,4 @@ __pycache__/
 !/outputs/experiments/
 /outputs/experiments/**
 !/outputs/experiments/**/
-!/outputs/experiments/*/*.png
+!/outputs/experiments/**/history.csv

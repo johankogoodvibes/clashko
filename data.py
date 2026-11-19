@@ -9,8 +9,9 @@ CSV_FILE = DATA_DIR / "combined_dataset" / "recent_matches.csv"
 # CSV_FILE = DATA_DIR / "player_check" / "recent_matches.csv"
 MAX_LEVEL = 16
 MAX_ELIXIR_LEAKED = None # 9.0  # Both players must be below this value. None disables the filter.
-MIN_TROPHIES = 14_000  # Both players must meet this minimum. None disables the filter.
-MAX_ROWS = 50_000  # Cap eligible matches after filtering. None keeps them all.
+MIN_TROPHIES = 13_200  # Both players must meet this minimum. None disables the filter.
+MAX_TROPHIES = 14_500  # Both players must be at or below this maximum.
+MAX_ROWS = None # Cap eligible matches after filtering. None keeps them all.
 
 # Fixed card order shared by both decks; preserve this order for saved models.
 card_names = [
@@ -134,14 +135,21 @@ def load_data(max_rows=MAX_ROWS, csv_path=None):
     elif MAX_ELIXIR_LEAKED is not None:
         print("Leaked-elixir filter skipped: dataset has no complete pair of leaked-elixir columns.", flush=True)
 
-    if MIN_TROPHIES is not None:
+    if MIN_TROPHIES is not None or MAX_TROPHIES is not None:
         players = pd.read_csv(source_path.with_name("players.csv"), usecols=["tag", "mmr"])
         ratings = pd.to_numeric(players.set_index("tag")["mmr"], errors="coerce")
         player_tags = ["player_1_tag", "player_2_tag"]
         trophies = battles[player_tags].apply(lambda tags: tags.map(ratings))
         known = np.isfinite(trophies).all(axis=1)
-        keep = known & trophies.ge(MIN_TROPHIES).all(axis=1)
-        print(f"Trophy filter: both players >= {MIN_TROPHIES:g} | "
+        keep = known.copy()
+        bounds = []
+        if MIN_TROPHIES is not None:
+            keep &= trophies.ge(MIN_TROPHIES).all(axis=1)
+            bounds.append(f">= {MIN_TROPHIES:g}")
+        if MAX_TROPHIES is not None:
+            keep &= trophies.le(MAX_TROPHIES).all(axis=1)
+            bounds.append(f"<= {MAX_TROPHIES:g}")
+        print(f"Trophy filter: both players {' and '.join(bounds)} | "
               f"kept {keep.sum():,}/{len(battles):,} matches "
               f"({(~known).sum():,} with missing/invalid ratings)", flush=True)
         battles = battles.loc[keep]
