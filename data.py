@@ -42,7 +42,71 @@ tower_names = ["Tower Princess", "Cannoneer", "Dagger Duchess", "Royal Chef"]
 input_names = card_names + tower_names
 
 
+# Maximum King Tower and Princess Tower HP by level.
+# King Tower: Clash Royale Wiki. Tower Troops: crtool game data 16.635.1.
+KING_MAX_HP = {
+    1: 2400, 2: 2568, 3: 2736, 4: 2904, 5: 3096, 6: 3312, 7: 3528, 8: 3768,
+    9: 4008, 10: 4392, 11: 4824, 12: 5304, 13: 5832, 14: 6408, 15: 7032, 16: 7704,
+}
+TOWER_MAX_HP = {
+    "Tower Princess": {
+        1: 1400, 2: 1512, 3: 1624, 4: 1750, 5: 1890, 6: 2030, 7: 2184, 8: 2352,
+        9: 2534, 10: 2786, 11: 3052, 12: 3346, 13: 3668, 14: 4032, 15: 4424, 16: 4858,
+    },
+    "Cannoneer": {
+        6: 1740, 7: 1872, 8: 2016, 9: 2172, 10: 2388, 11: 2616, 12: 2868, 13: 3144,
+        14: 3456, 15: 3792, 16: 4164,
+    },
+    "Dagger Duchess": {
+        9: 2298, 10: 2527, 11: 2768, 12: 3035, 13: 3327, 14: 3657, 15: 4013, 16: 4406,
+    },
+    "Royal Chef": {9: 2244, 10: 2467, 11: 2703, 12: 2963, 13: 3248, 14: 3571, 15: 3918, 16: 4302},
+}
+
+
+def _post_match_results(battles):
+    crown_columns = [f"player_{side}_crowns" for side in (1, 2)]
+    crown_counts = battles.reindex(columns=crown_columns).apply(pd.to_numeric, errors="coerce")
+    crowns = crown_counts.where(crown_counts.isin([0, 1, 2, 3]), -1).to_numpy(dtype=np.int32)
+
+    hp_columns = [
+        f"player_{side}_{tower}_hp"
+        for side in (1, 2)
+        for tower in ("king_tower", "princess_tower_1", "princess_tower_2")
+    ]
+    remaining_hp = battles.reindex(columns=hp_columns).apply(pd.to_numeric, errors="coerce")
+    hp = remaining_hp.to_numpy(dtype=np.float32, copy=True).reshape(-1, 2, 3)
+
+    for side in range(2):
+        side_hp = hp[:, side]
+        opposing_crowns = crowns[:, 1 - side]
+        # Princess HP is packed in API order. Use the score to fill destroyed slots.
+        destroyed = np.column_stack(
+            (opposing_crowns == 3, opposing_crowns >= 2, opposing_crowns >= 1)
+        )
+        side_hp[destroyed & np.isnan(side_hp)] = 0
+
+        levels = pd.to_numeric(battles[f"player_{side + 1}_tower_level"], errors="coerce")
+        names = battles[f"player_{side + 1}_tower_name"]
+        king_max_hp = levels.map(KING_MAX_HP).to_numpy(dtype=np.float32)
+        princess_max_hp = np.array(
+            [TOWER_MAX_HP.get(name, {}).get(level, np.nan) for name, level in zip(names, levels)],
+            dtype=np.float32,
+        )
+        maximum_hp = np.column_stack((king_max_hp, princess_max_hp, princess_max_hp))
+        hp[:, side] = np.where(side_hp == 0, 0, side_hp / maximum_hp)
+
+    return hp, crowns
+
+
 def load_data(max_rows=MAX_ROWS, csv_path=None):
+    """Return deck inputs, winner labels, normalized tower HP and battle crowns.
+
+    HP has shape (matches, 2, 3) in King, Princess 1, Princess 2 order. The
+    Princess slots follow API order, and the King level is assumed to equal
+    the equipped Tower Troop level. Unknown HP is NaN. Crowns has shape
+    (matches, 2) in player order, with -1 for an unknown score.
+    """
     source_path = Path(csv_path) if csv_path is not None else CSV_FILE
     print(f"Loading collected matches from {source_path}", flush=True)
     battles = pd.read_csv(source_path)
@@ -120,5 +184,9 @@ def load_data(max_rows=MAX_ROWS, csv_path=None):
         X[rows, side, indices, 0] = 1
         X[rows, side, indices, 3] = levels[present] / MAX_LEVEL
 
-    print(f"Formatted inputs: {X.shape} | Labels: {y.shape}", flush=True)
-    return X, y
+    hp, crowns = _post_match_results(battles)
+    print(
+        f"Formatted inputs: {X.shape} | Labels: {y.shape} | "
+        f"Tower HP: {hp.shape} | Crowns: {crowns.shape}", flush=True
+    )
+    return X, y, hp, crowns

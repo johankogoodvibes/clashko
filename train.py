@@ -25,7 +25,7 @@ def main(*, model_options=None, output_dir=OUTPUT_DIR):
     from plot_history import plot_history
 
     keras.utils.set_random_seed(RANDOM_SEED)
-    X, y = load_data()
+    X, y, _, _ = load_data()
     train_indices, holdout_indices = train_test_split(
         range(len(y)), test_size=0.2, random_state=RANDOM_SEED
     )
