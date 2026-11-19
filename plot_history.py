@@ -16,8 +16,9 @@ import pandas as pd
 def plot_history(history, output_path):
     epochs = range(1, len(history["loss"]) + 1)
     fig, axes = plt.subplots(1, 2, figsize=(12, 4), layout="constrained")
+    accuracy_key = "winner_accuracy" if "winner_accuracy" in history else "accuracy"
 
-    for ax, metric, title in zip(axes, ["loss", "accuracy"], ["Loss", "Accuracy"]):
+    for ax, metric, title in zip(axes, ["loss", accuracy_key], ["Loss", "Accuracy"]):
         ax.plot(epochs, history[metric], marker="o", label="Training")
         ax.plot(epochs, history[f"val_{metric}"], marker="o", label="Validation")
         ax.set_title(title)

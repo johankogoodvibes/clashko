@@ -25,15 +25,15 @@ def main(*, model_options=None, output_dir=OUTPUT_DIR):
     from plot_history import plot_history
 
     keras.utils.set_random_seed(RANDOM_SEED)
-    X, y = load_data()
+    X, y, hp, crowns = load_data()
     train_indices, holdout_indices = train_test_split(
         range(len(y)), test_size=0.2, random_state=RANDOM_SEED
     )
     val_indices, test_indices = train_test_split(
         holdout_indices, test_size=0.5, random_state=RANDOM_SEED
     )
-    X_train, y_train = X[train_indices], y[train_indices]
-    X_val, y_val = X[val_indices], y[val_indices]
+    X_train, y_train, hp_train, crowns_train = X[train_indices], y[train_indices], hp[train_indices], crowns[train_indices]
+    X_val, y_val, hp_val, crowns_val = X[val_indices], y[val_indices], hp[val_indices], crowns[val_indices]
     del X, y
     print(
         f"Train: {len(train_indices):,} | Validation: {len(val_indices):,} "
@@ -45,28 +45,42 @@ def main(*, model_options=None, output_dir=OUTPUT_DIR):
     y_train_one_hot = keras.utils.to_categorical((y_train == 1).astype(np.int32), num_classes=2)
     y_val_one_hot = keras.utils.to_categorical((y_val == 1).astype(np.int32), num_classes=2)
 
+    train_targets = {
+        "winner":y_train_one_hot,
+        "tower_hp":hp_train,
+        "crowns":crowns_train,
+    }
+
+    val_targets = {
+        "winner":y_val_one_hot,
+        "tower_hp":hp_val,
+        "crowns":crowns_val,
+    }
+    train_targets = {name: train_targets[name] for name in cnn.output_names}
+    val_targets = {name: val_targets[name] for name in cnn.output_names}
+
     fit_args = dict(
-        validation_data=(X_val, y_val_one_hot),
+        validation_data=(X_val, val_targets),
         batch_size=BATCH_SIZE,
         verbose=2,
     )
     
     warmup = cnn.fit(
         X_train,
-        y_train_one_hot,
+        train_targets,
         epochs=WARMUP,
         **fit_args
     )
 
     history = cnn.fit(
         X_train,
-        y_train_one_hot,
+        train_targets,
         **fit_args,
         initial_epoch=WARMUP,
         epochs=EPOCHS,
         callbacks=[
             keras.callbacks.EarlyStopping(
-                monitor="val_loss",
+                monitor="val_loss" if len(cnn.output_names) == 1 else "val_winner_loss",
                 patience=6,
                 min_delta=0.001,
                 restore_best_weights=True,
