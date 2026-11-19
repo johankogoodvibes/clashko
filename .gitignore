@@ -6,4 +6,8 @@ __pycache__/
 !/data/check_players.py
 !/data/collect_mmr_bubble.py
 !/data/merge_mmr_bubbles.py
-outputs/
+/outputs/*
+!/outputs/experiments/
+/outputs/experiments/**
+!/outputs/experiments/**/
+!/outputs/experiments/*/*.png
