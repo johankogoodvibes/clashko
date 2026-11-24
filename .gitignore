@@ -11,3 +11,4 @@ __pycache__/
 /outputs/experiments/**
 !/outputs/experiments/**/
 !/outputs/experiments/**/history.csv
+/popis/*

@@ -3,14 +3,10 @@
 import keras
 from keras.layers import (
     Dense,
-    Flatten,
-    Dropout,
-    GlobalAveragePooling1D,
     EinsumDense,
     MultiHeadAttention,
     Lambda,
     Add,
-    Multiply,
     Concatenate,
     LayerNormalization,
     Reshape,
@@ -19,13 +15,15 @@ from keras.layers import (
 from keras.optimizers import Adam
 import tensorflow as tf
 
+from logistic_model import build_logistic_model
+
 CARD_FEATURES = 64
 MATCHUP_LAYERS = 4
 
 
 METRICS = [
     "winner",
-    "tower_hp",
+    # "tower_hp",
     # "crowns"
 ]
 METRIC_TO_LOSS = {
@@ -46,12 +44,19 @@ METRIC_TO_METRIC = {
 
 
 def build_model(
-    input_shape, *, matchup_layers=MATCHUP_LAYERS, card_features=CARD_FEATURES,
+    input_shape, *, matchup_layers=None, card_features=None,
     targets=None,
 ):
     targets = tuple(METRICS if targets is None else targets)
     if not targets or len(set(targets)) != len(targets) or any(name not in METRIC_TO_LOSS for name in targets):
         raise ValueError("Select one or more distinct targets: winner, tower_hp, crowns.")
+
+    default_architecture = matchup_layers is None and card_features is None
+    # Comment out the next line to use the transformer for default winner-only training.
+    if default_architecture and targets == ("winner",): return build_logistic_model(input_shape)
+
+    matchup_layers = MATCHUP_LAYERS if matchup_layers is None else matchup_layers
+    card_features = CARD_FEATURES if card_features is None else card_features
     deck = keras.Input(shape=input_shape[1:])
 
     # Each card/tower row has its own projection, applied in one batched operation.

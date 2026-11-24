@@ -14,6 +14,8 @@ from merge_mmr_bubbles import save_plots
 
 START_TAG = "20P2PGJ202"       # Example: "#YOURTAG"
 START_MMR = 8000      # Set the approximate starting Ladder rating, e.g. 6000.
+MIN_MMR = None        # Inclusive starting trophy bounds for both players.
+MAX_MMR = None        # None leaves that end of the range open.
 TARGET_MATCHES = 100_000
 MAX_NEW_MATCHES_PER_PLAYER = 30
 WORKERS = 8
@@ -24,6 +26,12 @@ OUTPUT_ROOT = Path(__file__).with_name("mmr_bubbles")
 
 def normalize_tag(tag):
     return "#" + tag.strip().upper().lstrip("#")
+
+
+def mmr_in_range(mmr):
+    if mmr is None:
+        return MIN_MMR is None and MAX_MMR is None
+    return (MIN_MMR is None or mmr >= MIN_MMR) and (MAX_MMR is None or mmr <= MAX_MMR)
 
 
 def add_matches(tag, battles, players, seen, contributions, writer, target):
@@ -38,14 +46,17 @@ def add_matches(tag, battles, players, seen, contributions, writer, target):
     for battle in sorted(ladder, key=lambda item: item.get("battleTime", ""), reverse=True):
         if contributions.get(tag, 0) >= MAX_NEW_MATCHES_PER_PLAYER or len(seen) >= target:
             break
+        participants = battle.get("team", []) + battle.get("opponent", [])
+        if not all(mmr_in_range(player.get("startingTrophies")) for player in participants):
+            continue
         row = api.match_row(battle)
         if row is None:
             continue
         if row["player_1_tag"] != tag:
             row = api.match_row({**battle, "team": battle["opponent"], "opponent": battle["team"]})
-        for player in battle["team"] + battle["opponent"]:
+        for player in participants:
             player_tag = player["tag"]
-            if players.get(player_tag) is None:
+            if players.get(player_tag) is None or not mmr_in_range(players[player_tag]):
                 players[player_tag] = player.get("startingTrophies")
             if player_tag != tag:
                 opponents.add(player_tag)
@@ -122,11 +133,16 @@ def collect_bubble(start_tag, start_mmr, folder, target=TARGET_MATCHES):
     executor = ThreadPoolExecutor(max_workers=WORKERS)
     futures, attempted = {}, set()
     extras = deque(normalize_tag(tag) for tag in EXTRA_START_TAGS)
+    seed_tags = {start_tag, *extras}
     rng = random.Random(47)
     initial_matches, started = len(seen), time.monotonic()
 
+    def can_follow(tag):
+        return tag in seed_tags or mmr_in_range(players.get(tag))
+
     def available(tag):
-        return tag not in checked and tag not in attempted and contributions.get(tag, 0) < MAX_NEW_MATCHES_PER_PLAYER
+        return (tag not in checked and tag not in attempted
+                and contributions.get(tag, 0) < MAX_NEW_MATCHES_PER_PLAYER and can_follow(tag))
 
     def next_tag():
         while heads:
@@ -150,7 +166,8 @@ def collect_bubble(start_tag, start_mmr, folder, target=TARGET_MATCHES):
     def checkpoint(file):
         file.flush()
         remaining_heads = [tag for tag in list(heads) + list(futures.values())
-                           if tag not in checked and contributions.get(tag, 0) < MAX_NEW_MATCHES_PER_PLAYER]
+                           if tag not in checked and contributions.get(tag, 0) < MAX_NEW_MATCHES_PER_PLAYER
+                           and can_follow(tag)]
         # Windows readers can briefly prevent a progress file from being replaced.
         for attempt in range(10):
             try:

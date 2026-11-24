@@ -20,7 +20,7 @@ def main(*, model_options=None, output_dir=OUTPUT_DIR):
     import pandas as pd
     from sklearn.model_selection import train_test_split
 
-    from data import load_data
+    from data import load_data, shuffle_player_sides
     from model import build_model
     from plot_history import plot_history
 
@@ -32,6 +32,7 @@ def main(*, model_options=None, output_dir=OUTPUT_DIR):
     val_indices, test_indices = train_test_split(
         holdout_indices, test_size=0.5, random_state=RANDOM_SEED
     )
+    shuffle_player_sides(X, y, hp, crowns, holdout_indices, seed=RANDOM_SEED)
     cnn = build_model(X.shape[1:], **(model_options or {}))
     valid = np.ones(len(y), dtype=bool)
     if "tower_hp" in cnn.output_names:
@@ -87,14 +88,14 @@ def main(*, model_options=None, output_dir=OUTPUT_DIR):
         **fit_args,
         initial_epoch=WARMUP,
         epochs=EPOCHS,
-        # callbacks=[
-        #     keras.callbacks.EarlyStopping(
-        #         monitor="val_winner_loss" if len(cnn.output_names) > 1 and "winner" in cnn.output_names else "val_loss",
-        #         patience=6,
-        #         min_delta=0.001,
-        #         restore_best_weights=True,
-        #     )
-        # ],
+        callbacks=[
+            keras.callbacks.EarlyStopping(
+                monitor="val_winner_loss" if len(cnn.output_names) > 1 and "winner" in cnn.output_names else "val_loss",
+                patience=6,
+                min_delta=0.001,
+                restore_best_weights=True,
+            )
+        ],
     )
 
     for metric, values in warmup.history.items():

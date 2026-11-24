@@ -5,12 +5,12 @@ import numpy as np
 import pandas as pd
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
-CSV_FILE = DATA_DIR / "combined_dataset" / "recent_matches.csv"
-# CSV_FILE = DATA_DIR / "player_check" / "recent_matches.csv"
+# CSV_FILE = DATA_DIR / "combined_dataset" / "recent_matches.csv"
+CSV_FILE = DATA_DIR / "player_check" / "recent_matches.csv"
 MAX_LEVEL = 16
 MAX_ELIXIR_LEAKED = None # 9.0  # Both players must be below this value. None disables the filter.
-MIN_TROPHIES = 13_200  # Both players must meet this minimum. None disables the filter.
-MAX_TROPHIES = 14_500  # Both players must be at or below this maximum.
+MIN_TROPHIES = None # 13_200  # Both players must meet this minimum. None disables the filter.
+MAX_TROPHIES = None # 14_500  # Both players must be at or below this maximum.
 MAX_ROWS = None # Cap eligible matches after filtering. None keeps them all.
 
 # Fixed card order shared by both decks; preserve this order for saved models.
@@ -198,3 +198,13 @@ def load_data(max_rows=MAX_ROWS, csv_path=None):
         f"Tower HP: {hp.shape} | Crowns: {crowns.shape}", flush=True
     )
     return X, y, hp, crowns
+
+
+def shuffle_player_sides(X, y, hp, crowns, match_indices, *, seed):
+    """Randomly swap the two sides of the indexed matches in place."""
+    swap = np.random.default_rng(seed).random(len(match_indices)) < 0.5
+    rows = match_indices[swap]
+    X[rows] = X[rows, ::-1]
+    y[rows] = 1 - y[rows]
+    hp[rows] = hp[rows, ::-1]
+    crowns[rows] = crowns[rows, ::-1]
